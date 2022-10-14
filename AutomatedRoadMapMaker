@@ -1,0 +1,883 @@
+
+/*---------------------------------------------------------------------
+ *  Automated RoadMap Maker - v2
+ * Created by Colin Bacon 22.08.2022
+ *    
+ * This excel office script (Typescript9 version 
+ * It's a standalone version i.e. just copy and paste
+ * the code and add the start and endDates on lines 44 & 45   
+
+*---------------------------------------------------------------------*/
+
+const RGB1 = "#0e316e"; //Dark Blue cell background
+const RGB2 = "#1e7ec7"; //Light Blue cell background
+const RGB3 = "#7209db"; //Pink for weekends
+let toggleDay: boolean = true;
+
+var toggleYear: boolean;
+
+let dayBackgroundColour = RGB1; //Start value which toggles
+let weekBackgroundColour = RGB1;//Start value which toggles
+let monthBackgroundColour = RGB1;//Start value which toggles
+let yearBackgroundColour = RGB1;//Start value which toggles
+let rangeBackgroundColour = RGB1;
+
+//Create a dateArray which is packed with details of all cell within the complete range
+var dateArray: string[][] = new Array();  //Declare empty multidimensional array
+
+//Create a formatArray which is use to store start and end cell addresses for instant formating
+var formatMonthArray: string[][] = new Array();  //Declare empty multidimensional array
+
+/*---------------------------------------------------------------------
+         function main()
+ ---------------------------------------------------------------------*/
+
+function main(workbook: ExcelScript.Workbook) {
+  //const startDate: Date = new Date();//today date In US mm-dd-yyyy format
+  //Console.log ( "__________________________________Running . Please Wait _________________________________");
+  //const startDate: Date = new Date();//todaY as startDate In US format i.e mm-dd-yyyy format
+  //Please Note that  dates are in US FORMAT
+  // 4 months will normally fit on .ppt POAP
+  const startDate: Date = new Date("09.01.2022");//startDate In US format i.e mm-dd-yyyy format
+  const endDate: Date = new Date("02.28.2023");////endDate In US format i.e mm-dd-yyyy format
+  //const endDate: Date = new Date("10.20.2022");////endDate In US format i.e mm-dd-yyyy format
+  const includeWeekend: boolean = true;
+
+
+  //ROADMAP CANVAS ORIGN - Set the starting postion of the RoadMap. Top Left is 0,0 point
+  let i = 0; //Range Start ith row - remembering zero is the first row
+  let j = 7; //Range start jth column - remembering zero is the first column
+
+  //DURATION: Determine the duration in Days between the start and end dates
+  const diff = endDate.valueOf() - startDate.valueOf();
+  const difference = Math.ceil(diff / (1000 * 3600 * 24));//Calculates the difference in days
+
+  //MONTHS - Initialize start months  for 1st record of RangeArray()
+  let currentMonthNumber = (startDate.getMonth());
+  let oldMonthNumber = (startDate.getMonth());
+  const currentMonth = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  let toggleMonth: boolean = true;
+  //let oldMonthNumber = [0][0];
+  let currentMonthAddress: string;
+
+  //DATE :  Initialize start week  for 1st record of RangeArray()
+  var currentDate: Date = addDays(startDate, 0); //Initial the startDate as the intial Date
+  console.log("currentDate for intialization= " + currentDate);
+
+  //format the currentDate as a string
+  var currentDateString = formatDate(currentDate)
+
+  //WEEKS - Initialize start week  for 1st record of RangeArray()
+  let currentWeekNumberAndYear = getISO8601_WeekNo(startDate); //(StartDate) to initialize otherwise (currentDate)
+  let currentWeekNo = "WK_" + currentWeekNumberAndYear[0];// The array hold 2 values, [<WEEK NO.>], [<YEAR>]
+  let currentDayNumber = currentDate.getDay();
+  let oldWeek = currentWeekNumberAndYear[0]; // The array hold 2 values, [<WEEK NO.>], [<YEAR>]
+
+
+  //YEARS: Inititalize start Year for 1st record of RangeArray()
+  const startYear = startDate.getFullYear();
+  const endYear = endDate.getFullYear();
+  let currentYear = String(currentWeekNumberAndYear[1]); // The array hold 2 values, [<WEEK NO = 0.>], [<YEAR=1>]
+  let oldYear = startYear; //Used for background colour toggle
+
+
+  //DAYS: Determine the current day number i.e.0,1,2,3,4 where 0= Sundays and current day ie. M,T,W, of the week
+  const weekday = ["S", "M", "T", "W", "T", "F", "S"];
+  let currentDay = weekday[currentDate.getDay()];
+  //Initialize the RoadmapSheet
+  let roadMapSheet = workbook.getWorksheet("RoadMap");
+
+
+  //Delete the RoadMap worksheet if already exists and make a clean one without namedItems otherwise
+  //An error occurs trying to name it again
+  const itemsName = "RoadMap";
+  workbook.getWorksheet(itemsName)?.delete();
+  const selectedSheet = workbook.getFirstWorksheet();
+  const itemsSheet = selectedSheet.copy(ExcelScript.WorksheetPositionType.before, selectedSheet);
+  itemsSheet.setName(itemsName);
+  itemsSheet.activate();
+
+
+
+  //Initialize the RoadmapSheet
+  roadMapSheet = workbook.getWorksheet("RoadMap");
+
+  //(FUNCTIIOMN?)Get the metadata of this starting cell. Used to intitialize the the first range address in the rangeArray 
+  let currentCell = roadMapSheet.getCell(i, j);//currrentCell is the current active cell
+
+  //(FUNCTIIOMN?)Get the address of the the the starting cell. 
+  //USed to intitialize the the first range address in the rangeArray
+  let currentCellAddress = currentCell.getOffsetRange(0, 0).getAddress();
+
+  //Initialise the oldMonthStartCellAddress for the formatArray otherwise the first address will be undefeined in the function fornatRange() 
+  let oldMonthStartCellAddress = currentCellAddress;
+
+  let currentcolumn = 0;//the starting column is the same j value at offset=0
+  console.log("No of day between Start and End Dates is =" + difference + " Year of startDate = " + endYear);
+
+
+  //Determine Start and End Cell Addresses to calculate the size of the ranges
+  const rangeStartAddress = roadMapSheet.getCell(i, j).getAddress();//get the current cell address
+  const rangeEndAddress = roadMapSheet.getCell(i, j + difference - 1).getAddress();//get the current cell address
+
+  /*---------------------------------------------------------------------
+          Main Loop             Main Loop        Main Loop
+  ---------------------------------------------------------------------*/
+
+
+  for (let dateRange = 0; dateRange < difference; dateRange++) {
+    console.log("Current Date = " + dateRange + "__________________________________Running . Please Wait ______________________");
+    //console.log("*----------------NEXT RECORD------------------------------------*");  
+    //The currentcolumn++;  counts the jth column
+    //Get the address of the the new active cell
+
+    let currentCellAddress = currentCell.getOffsetRange(0, currentcolumn).getAddress();
+
+    //Cleanup the currentCellAddress which is the 2nd part of the string [1]
+    let currentCellAddressString = currentCellAddress.split("!")[1];
+    //console.log("currentCellAddress= " + currentCellAddressString);
+
+    //Now get the address as an index i.e. ith row jth column
+    let currentCellColumnIndex = currentCell.getOffsetRange(0, currentcolumn).getColumnIndex()
+    let currentCellRowIndex = currentCell.getOffsetRange(0, currentcolumn).getRowIndex()
+    console.log("currentCellIndex i:j = " + currentCellRowIndex + ":" + currentCellColumnIndex)
+
+    //add another day to the startDate
+    var currentDate: Date = addDays(startDate, dateRange);
+    //console.log("currentDate= " + currentDate);
+
+    //format the currentDate as a string
+    var currentDateString = formatDate(currentDate);
+    //roadMapSheet.getCell(1, 1).select();
+    //roadMapSheet.getCell(1, 1).setValue(String(currentDateString));
+    //console.log("currentDateString= " + currentDateString);
+    //let mydate:Date;
+
+    //Determine the current day number i.e.0,1,2,3,4 where 0= Sundays and current day ie. M,T,W, of the week
+    //used to determine the day of the week background cell colour
+    let currentDayNumber = currentDate.getDay();
+    let currentDay = weekday[currentDate.getDay()];
+    let currentWeekNumberAndYear = getISO8601_WeekNo(currentDate);
+    let currencleaWeekNo = "WK_" + currentWeekNumberAndYear[0];
+    let currentYear = String(currentWeekNumberAndYear[1]);
+    currentMonthNumber = (currentDate.getMonth());
+    //console.log("currentDayNumber = " + currentDayNumber+ " currentDay= "   + currentDay);
+    var formatMonthEndAddress: string;
+
+    //for (let arrayPosition = 0; arrayPosition <=4;arrayPosition++){
+
+    /*---------------------------------------------------------------------
+       CREATE DATE ARRAY
+    ---------------------------------------------------------------------*/
+
+    /**
+       if logic a weekend then skip
+    */
+    if (includeWeekend) {
+
+      //*****************************/
+
+      dateArray.push([
+        currentYear,                         // 8=Year 2022, 2023, (taken from week function)
+        currentMonth[currentMonthNumber],    // 7=Current Month January, February
+        currencleaWeekNo,// 6=WK_1. WK2      //W_ > WKNO.)
+        String(currentDateString),           // 0=The current date in format 01.01.2022
+        currentDay,                          // 5=the day M,T,W...
+        String(currentCellAddressString),    // 1= Cells addres in the format of AF11
+        String(currentCellRowIndex),         // 2=ith Row
+        String(currentCellColumnIndex),      // 3=jth Column
+        String(currentMonthNumber),           // month Number    
+        String(currentWeekNumberAndYear[0]), // WeekNo
+        String(currentDayNumber),             // Day number  
+        String(dateRange)                     //Current Record Number
+      ]);
+      //console.log(dateArray);
+
+
+      /**
+       * the currentCellAddress is stored for the range. It's written to the array after the month toggle check as we need the address of the previous cell and not the actual currentcell to trigger a colour toggle*/
+      currentMonthAddress = currentCellAddress;
+
+      //Increment the column to paint the next day 
+      currentcolumn++;
+    }
+    else {
+      if (currentDayNumber == 1 || currentDayNumber === 2 || currentDayNumber === 3 || currentDayNumber === 4 || currentDayNumber === 5) {
+        //*****************************/
+
+        dateArray.push([
+          currentYear,                         // 8=Year 2022, 2023, (taken from week function)
+          currentMonth[currentMonthNumber],    // 7=Current Month January, February
+          currencleaWeekNo,// 6=WK_1. WK2      //W_ > WKNO.)
+          String(currentDateString),           // 0=The current date in format 01.01.2022
+          currentDay,                          // 5=the day M,T,W...
+          String(currentCellAddressString),    // 1= Cells addres in the format of AF11
+          String(currentCellRowIndex),         // 2=ith Row
+          String(currentCellColumnIndex),      // 3=jth Column
+          String(currentMonthNumber),          // month Number    
+          String(currentWeekNumberAndYear[0]), // WeekNo
+          String(currentDayNumber),            // Day number  
+          String(dateRange)                    //Current Record Number
+        ]);
+        //console.log(dateArray);
+
+
+        /**
+         * the currentCellAddress is stored for the range. It's written to the array after the month toggle check as we need the address of the previous cell and not the actual currentcell to trigger a colour toggle*/
+        currentMonthAddress = currentCellAddress;
+
+        //Increment the column to paint the next day 
+        currentcolumn++;
+
+      };
+    };
+    //Store the current date values for the formating arrays
+    // let oldYear = currentYear;
+    // let oldWeek = currentWeekNo;
+
+  } //END OF MAIN LOOP
+
+/*---------------------------------------------------------------------
+           OBATIAN THE DIMENSIONS btain OF THE dateArray[]
+  ----------------------------------------------------------------------        
+  This dynamically works out the size of the array and sets the range size accordingly.
+
+  */
+  let dimensions = [
+    dateArray.length,
+    dateArray.reduce((x, y) => Math.max(x, y.length), 0)
+  ];
+  console.log("dimensions Prior to transposing")
+  console.log(dimensions)
+  /*---------------------------------------------------------------------
+      TRANSPOSING THE dateArray[] 90 DEGREES INTO A NEW ARRAY tranposedRoadMapData[]
+  ----------------------------------------------------------------------*/
+  //Transpose the data array so the dates go along the columns rather than along the rows.
+  let tranposedRoadMapData = dateArray[0].map((_, colIndex) => dateArray.map(row => row[colIndex]));
+  console.log("tranposedRoadMapData")
+  console.log(tranposedRoadMapData)
+
+
+/*---------------------------------------------------------------------
+    SLICE THE ARRAY tranposedRoadMapData[] to include the top 5 rows
+    and copy into a new array called slicedArray[]
+----------------------------------------------------------------------*/
+  //slice the 2D array to only show the 1st 5 rows of the array from 0->4
+  //https://stackoverflow.com/questions/51383031/slice-section-of-two-dimensional-array-in-javascript
+  let rowStart = 0;
+  let rowEnd = 4; //the first 4 rows (zero-indexed so 5 rows) are visible. change to 11 to show the complete array for debugging
+  let columnStart = 0
+  let columnEnd = dimensions[0]
+  let slicedArray = tranposedRoadMapData.slice(rowStart, rowEnd + 1).map(i => i.slice(columnStart, columnEnd + 1))
+  console.log("slicedArray=")
+  console.log(slicedArray)
+
+/*---------------------------------------------------------------------
+    Obtain the dimensions of the transposed and sliced array -> slicedArray[]
+----------------------------------------------------------------------*/
+  //This dynamicially works out the size of the previously sliced array and set the range size accordingly.
+  dimensions = [
+    slicedArray.length,
+    slicedArray.reduce((x, y) => Math.max(x, y.length), 0)
+  ];
+  console.log("Dimensions Post Transposing")
+  console.log(dimensions)
+  
+/*---------------------------------------------------------------------
+    Determine the range for the data to be to pasted 
+----------------------------------------------------------------------
+  getRangeByIndexes(i, j, dimensions[0], dimensions[1])
+  getRangeByIndexes(start row position, start column positioion row count, column count )
+
+  Note: The size of the range and the size of data elecments need to be exactly the same size otherwise an error will be thrown. This aints all transposed data from the array into the range.
+  */
+
+  //var range = roadMapSheet.getRangeByIndexes(i, j, 9, dateArray.length)   //for dates going in columns use this */
+  var range = roadMapSheet.getRangeByIndexes(i, j, dimensions[0], dimensions[1])  //for dates going in columns use this
+  
+  
+
+  //After defining the size of the range, .setValue() dumps the data into that range. 
+  //range.setValues(tranposedRoadMapData); //Uncommnet this is you want to see the complete transposedArray
+  range.setValues(slicedArray);
+
+  //Add the formating to the array before slicing anRead the formatMonthArray and format the month cells
+  //formatMonthRange(roadMapSheet);<----This function is no longer required but left in for reference
+  formatCanvasRanges(roadMapSheet);
+
+
+}//END OF FUNCTION MAIN()
+
+
+
+/*---------------------------------------------------------------------
+         function getCellAddress
+ ---------------------------------------------------------------------*/
+
+
+function getCleanedUpCellAddresse(currentWorksheet: ExcelScript.Worksheet, rangeStartAddress: string, rangeEndAddress: string, rangeOffSet_i: number, rangeOffset_j: number) {
+  console.log(" __________________getCleanedUpCellAddresse() ________________________");
+
+
+  // For the API, the range needs to be formated as follows "A3:C3".
+  // The cell start-address and end-address are already determined and are in the format RoadMap!A3
+  //So the string needs to be splt to just extract the "A3" from the address. The "!" is used 
+  //as the splitting character
+  // Functions could be created to do this: 
+  // formatRange(rangeString, startCell,endCell,i_offset,j_offset)
+  //where the rangeString is returned which can be used for further formating 
+
+  //Split out the start and end address from the strings
+  let startRange = rangeStartAddress.split("!");
+  let endRange = rangeEndAddress.split("!");
+  // the string RoadMap!A3 will be split into 2 parts the [1] determines the postiion the address part only. 
+  let rangeString = (startRange[1] + ":" + endRange[1]);
+
+  //console.log(" rangeString is now = " + rangeString);
+
+  return (rangeString);
+}
+
+/*---------------------------------------------------------------------
+         function Make Formating Arrays for week, day, month, years.
+         This function reads the format array that was generated 
+         at the same time as the dateArray         
+ ---------------------------------------------------------------------*/
+
+function formatCanvasRanges(currentWorksheet: ExcelScript.Worksheet) {
+  //console.log(" __________________Now in the Function formathCanvasRange() ________________________");
+  let toggleYear: boolean = true;
+  let toggleMonth: boolean = true;
+  let toggleWeek: boolean = true;
+  var myYearArray: string[][] = new Array();  //Declare empty multidimensional array
+  var myMonthArray: string[][] = new Array();  //Declare empty multidimensional array
+  var myWeekArrayWithWE: string[][] = new Array();  //Declare empty multidimensional array
+  var myWeekArraywithOutWE: string[][] = new Array();  //Declare empty multidimensional array
+
+
+  let currentYearNumber = dateArray[0][0];
+  let currentMonthNumber = dateArray[0][8];
+  let currentWeekNumber = dateArray[0][9];
+  let currentweekWIWE = dateArray[0][9];
+
+  var oldYearNumber: string = currentYearNumber;
+  var oldMonthNumber: string = currentMonthNumber;
+  var oldWeekNumber: string = currentWeekNumber;
+  var oldWeekWOWE: string = currentWeekNumber;
+
+
+
+  var oldYearStartAddress: string = dateArray[0][5];
+  var oldMonthStartAddress: string = dateArray[0][5];
+  var oldWeekWIWEStartAddress: string = dateArray[0][5];
+  var oldWeekWOWEStartAddress: string = dateArray[0][5];
+
+  //to cater for the first range the start address is the the first value
+  let rangeYearStartAddress = dateArray[0][5]
+  let rangeMonthStartAddress = dateArray[0][5];
+  let rangeWeekStartAddress = dateArray[0][5];
+
+  //To draw verticle lines to separate the weeks on the canvas read i & j  cell cordinates to build  Range index 
+  //This is stored in the dateArry[] fields 6 & 7  (zero-indexed)
+  let drawLineStartRowIndex = dateArray[0][6]
+  let drawLineStartColumnIndex = dateArray[0][7]
+  let drawLineEndRowIndex = dateArray[0][6]
+  let drawLineEndColumnIndex = dateArray[0][7]
+
+
+
+
+  //console.log(dateArray);//<<<<<<<<
+
+  //  Loop and cycle through the dateArray and read the values
+  //  The trigger to start formating is the change of month
+  //  Once triggered the background colour is toggled from RGB1 and RGB2
+  //  The enddate of the range is calculate as the address of the previous record
+  //  The current cell address is stored as the new startRange for the next range
+  //  
+  for (let dateRange = 0; dateRange <= dateArray.length - 1; dateRange++) {
+
+    // console.log("reading current record = " + dateRange);
+
+    //to avoid trying to search in a previous record at the begining of the loop skip the 1st record  
+    if (dateRange === 0) {
+
+      //For Years
+      let currentYearNumber = dateArray[dateRange][0]
+      let oldYearNumber = currentYearNumber;
+      let rangeYearStartAddress = dateArray[0][5]; //Store the cell address of the 1st record
+
+      //For Months
+      let currentMonthNumber = dateArray[dateRange][8]
+      let oldMonthNumber = currentMonthNumber;
+      let rangeMonthStartAddress = dateArray[0][5]; //Store the cell address of the 1st record
+
+
+      //For Weeks
+      let currentWeekNumber = dateArray[dateRange][9]
+      let oldWeekNumber = currentWeekNumber;
+      let rangeWeekStartAddress = dateArray[0][5]; //Store the cell address of the 1st record
+    }
+    //console.log(dateArray[dateRange])
+
+
+    //console.log("current Record is = " [dateRange] + " the 8th data element is = " + dateArray[dateRange][8]);
+    //Preparing Year
+    let currentYearNumber = dateArray[dateRange][0]; //check the month field current record
+
+    //Preparing Months
+    let currentMonthNumber = dateArray[dateRange][8]; //check the month field current record
+
+    //Preparing Weeks
+    let currentWeekNumber = dateArray[dateRange][9]
+
+    //Add a unique primary key address name into the top row of the RoadMap using addNamedItems()
+    //this is used to find the column for painting gantt charts later
+    //Line 370: Worksheet addNamedItem: A resource with the same name or identifier already exists.
+    let currentDateName = dateArray[dateRange][3]; //the name of this Cell
+    let currentDateAddress = dateArray[dateRange][5]; //The address of this cell
+    currentWorksheet.addNamedItem("_" + currentDateName, currentDateAddress, "comment_" + currentDateName);
+    console.log("Stored the following address as unique formaula " + currentDateAddress);
+
+
+
+    /*---------------------------------------------------------------------
+         TRIGGER CHANGE OF WEEKS
+  ---------------------------------------------------------------------*/
+
+    if (currentWeekNumber != oldWeekNumber) {
+      // console.log("_______________Week Chnange is triggered_________________");
+
+      let rangeWeekEndAddress = dateArray[dateRange - 1][5]; //current address
+      console.log(dateRange + " = " + rangeWeekStartAddress + " : " + rangeWeekEndAddress + "Toggle =" + toggleWeek);
+      //Week Row 0 degree text
+      formatRange(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 2, 0, toggleWeek, 8)
+      formatCellText(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 2, 0, rangeBackgroundColour, "white", 0, 10);
+      //Merge the ranges for the weeks
+      currentWorksheet.getRange(rangeWeekStartAddress + ":" + rangeWeekEndAddress).getOffsetRange(2, 0).merge(false);
+
+      //Date Row with 90 degree text
+      formatRange(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 3, 0, toggleWeek, 8)
+      formatCellText(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 3, 0, rangeBackgroundColour, "white", 90, 10)
+
+      //Day row at 0 degree text
+      formatRange(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 4, 0, toggleWeek, 8)
+      formatCellText(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 4, 0, rangeBackgroundColour, "white", 0, 10)
+
+
+      //Store the current cell address as the start of the new rangegle the colour of the month next time roundWeek
+      rangeWeekStartAddress = dateArray[dateRange][5]
+
+      //Store the current month as the new old month 
+      oldWeekNumber = currentWeekNumber;
+
+      //Toggle the background colour
+      toggleWeek = !toggleWeek;
+
+
+
+      //To draw verticle lines to separate the weeks on the canvas read i & j  cell cordinates to build  getRangeByindex() 
+      //These corodinates are stored in the dateArry[] fields 6 & 7  (zero-indexed)
+
+      let drawLineEndRowIndex = dateArray[dateRange - 1][6]; //this is the previous record as the end address for rows
+
+      //console.log("drawLineEndRowIndex =" + drawLineEndRowIndex );
+
+
+      let drawLineEndColumnIndex = dateArray[dateRange - 1][7]; //this is the previous record as the end address for columns
+
+
+      //The currentWorksheet.getRangeByIndexes requires the start index and end index of the range to draw the left and right cell borders
+      drawVerticalLines(currentWorksheet, Number(drawLineStartRowIndex), Number(drawLineStartColumnIndex), Number(drawLineEndRowIndex), Number(drawLineEndColumnIndex), RGB1, RGB2)
+
+      drawLineStartRowIndex = dateArray[dateRange][6]
+      drawLineStartColumnIndex = dateArray[dateRange][7]
+
+
+    }//Change Trigger
+
+
+    /*---------------------------------------------------------------------
+          TRIGGER CHANGE OF MONTHS
+   ---------------------------------------------------------------------*/
+    //console.log("dateRange ID = " + dateRange + "--- currentMonth = " + currentMonthNumber + "  oldMonth = " + oldMonthNumber)
+
+    //If the month changes the background colour is toggled
+
+    if (currentMonthNumber != oldMonthNumber) {
+      console.log("_______________Month Chnange is triggered_________________");
+
+      let rangeMonthEndAddress = dateArray[dateRange - 1][5]; //current address
+      //console.log(dateRange + " = " + rangeMonthStartAddress + " : " + rangeMonthEndAddress + "Toggle =" + toggleMonth);
+
+      //Format the Momth ranges
+      formatRange(currentWorksheet, rangeMonthStartAddress, rangeMonthEndAddress, 1, 0, toggleMonth, 10)
+      formatCellText(currentWorksheet, rangeWeekStartAddress, rangeMonthEndAddress, 1, 0, rangeBackgroundColour, "white", 0, 10)
+      currentWorksheet.getRange(rangeMonthStartAddress + ":" + rangeMonthEndAddress).getOffsetRange(1, 0).merge(false);
+
+      //Store the current cell address as the start of the new rangegle the colour of the month next time round
+      rangeMonthStartAddress = dateArray[dateRange][5]
+
+      //Store the current month as the new old month 
+      oldMonthNumber = currentMonthNumber;
+
+      //Toggle the background colour
+      toggleMonth = !toggleMonth;
+    }//Month Change trigger
+
+
+    /*---------------------------------------------------------------------
+         TRIGGER CHANGE OF YEAR
+  ---------------------------------------------------------------------*/
+    //console.log("currentYearNumber = " + currentYearNumber + "  oldYearNumber = " + oldYearNumber ) 
+
+
+    if (currentYearNumber != oldYearNumber) {
+      // console.log("______________YEAR Change is triggered_________________");
+
+      let rangeYearEndAddress = dateArray[dateRange - 1][5]; //current address
+      //console.log(dateRange + " = " + rangeYearStartAddress + " : " + rangeYearEndAddress + "Toggle =" + toggleYear);
+      //Year Row with 0 degree text and merged range
+      formatRange(currentWorksheet, rangeYearStartAddress, rangeYearEndAddress, 0, 0, toggleYear, 8)
+      formatCellText(currentWorksheet, rangeYearStartAddress, rangeYearEndAddress, 0, 0, rangeBackgroundColour, "white", 0, 12)
+      currentWorksheet.getRange(rangeYearStartAddress + ":" + rangeYearEndAddress).getOffsetRange(0, 0).merge(false);
+
+      //Store the current cell address as the start of the new rangegle the colour of the month next time roundWeek
+      rangeYearStartAddress = dateArray[dateRange][5]
+
+      //Store the current month as the new old month 
+      oldYearNumber = currentYearNumber;
+      //console.log("Year Changed currentYearNumber = " + currentYearNumber + "  oldYearNumber = " + oldYearNumber) 
+
+      //Toggle the background colour
+      toggleYear = !toggleYear;
+    }//Change YEAR Trigger
+
+  }//END OF LOOP
+
+
+
+  //console.log(dateArray.length);
+
+  //Format the YEARS ranges
+  let rangeYearEndAddress = dateArray[dateArray.length - 1][5];
+  formatRange(currentWorksheet, rangeYearStartAddress, rangeYearEndAddress, 0, 0, toggleYear, 10)
+  formatCellText(currentWorksheet, rangeYearStartAddress, rangeYearEndAddress, 0, 0, rangeBackgroundColour, "white", 0, 12)
+  currentWorksheet.getRange(rangeYearStartAddress + ":" + rangeYearEndAddress).getOffsetRange(0, 0).merge(false);
+
+  //Format the months ranges
+  let rangeMonthEndAddress = dateArray[dateArray.length - 1][5];
+  formatRange(currentWorksheet, rangeMonthStartAddress, rangeMonthEndAddress, 1, 0, toggleMonth, 10)
+  formatCellText(currentWorksheet, rangeMonthStartAddress, rangeMonthEndAddress, 1, 0, rangeBackgroundColour, "white", 0, 10)
+  //Merge the ranges for the Months
+  currentWorksheet.getRange(rangeMonthStartAddress + ":" + rangeMonthEndAddress).getOffsetRange(1, 0).merge(false);
+
+  //Format the last Week ranges
+  let rangeWeekEndAddress = dateArray[dateArray.length - 1][5];
+  formatRange(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 2, 0, toggleWeek, 8)
+  formatCellText(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 2, 0, rangeBackgroundColour, "white", 0, 10)
+  //Merge the ranges for the weeks
+  currentWorksheet.getRange(rangeWeekStartAddress + ":" + rangeWeekEndAddress).getOffsetRange(2, 0).merge(false);
+
+  //Format the last Date ranges
+  formatRange(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 3, 0, toggleWeek, 8)
+  formatCellText(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 3, 0, rangeBackgroundColour, "white", 90, 10)
+
+  //Format thelast Day ranges
+  formatRange(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 4, 0, toggleWeek, 8)
+  formatCellText(currentWorksheet, rangeWeekStartAddress, rangeWeekEndAddress, 4, 0, rangeBackgroundColour, "white", 0, 10)
+
+  //Format the last drawVerticle Lines 
+  let lastColumnIndexDateArrayRecord = dateArray[dateArray.length - 1][7];
+  let lastRangeByIndexColumnCount = Number(lastColumnIndexDateArrayRecord) - Number(drawLineStartColumnIndex);
+  console.log("lastColumnIndexDateArrayRecord= " + lastColumnIndexDateArrayRecord);
+  console.log("lastColumnIndexDateArrayRecord= " + lastRangeByIndexColumnCount);
+
+  console.log("StartIndex = " + Number(drawLineStartRowIndex), "StartIndex = " + Number(drawLineStartColumnIndex), "Row Count= " + 100, "ColounCount = " + lastRangeByIndexColumnCount, "Left Colour = " + RGB1, "Right Colour = " + "Red");
+
+  drawVerticalLines(currentWorksheet, Number(drawLineStartRowIndex), Number(drawLineStartColumnIndex), 100, Number(lastColumnIndexDateArrayRecord), RGB1, "Red");
+
+
+
+  //Format the final frame for a .ppt POAP 
+  let canvasRange = currentWorksheet.getUsedRange().getFormat();
+
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setStyle(ExcelScript.BorderLineStyle.continuous);
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setColor("000000");
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setWeight(ExcelScript.BorderWeight.medium);
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeTop).setStyle(ExcelScript.BorderLineStyle.continuous);
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeTop).setColor("000000");
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeTop).setWeight(ExcelScript.BorderWeight.medium);
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setStyle(ExcelScript.BorderLineStyle.continuous);
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setColor("000000");
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setWeight(ExcelScript.BorderWeight.medium);
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeRight).setStyle(ExcelScript.BorderLineStyle.continuous);
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeRight).setColor("000000");
+  canvasRange.getRangeBorder(ExcelScript.BorderIndex.edgeRight).setWeight(ExcelScript.BorderWeight.medium);
+
+
+
+
+
+  return
+}
+
+/*---------------------------------------------------------------------
+         function formatRange()
+ ---------------------------------------------------------------------*/
+
+function formatRange(currentWorksheet: ExcelScript.Worksheet, rangeStartAddress: string, rangeEndAddress: string, rangeOffSet_i: number, rangeOffset_j: number, toggleColour: boolean, textSize: number) {
+
+  //console.log(" __________________Now in the Function FormatRange() ________________________");
+  // For the API, the range needs to be formated as follows "A3:C3".
+  //The cell start and end address are already determined and are in the format RoadMap!A3
+  //So the string needs to be splt to just extract the "A3" from the address. The "!" is used 
+  //as the splitting character
+  // Functions could be created to do this: 
+  // formatRange(rangeString, startCell,endCell,i_offset,j_offset)
+  //where the rangeString is returned which can be used for further formating 
+
+
+  // the string RoadMap!A3 will be split into 2 parts the [1] determines the postiion the address part only. 
+  let rangeString = (rangeStartAddress + ":" + rangeEndAddress);
+
+  //console.log(" rangeString is now = "+  rangeString);
+
+
+  let formatRange = currentWorksheet.getRange(rangeString).getOffsetRange(rangeOffSet_i, rangeOffset_j);
+
+  //Format the colour within the range
+  //console.log("toggleColour=" + toggleColour)
+
+  if (toggleColour) {
+    rangeBackgroundColour = RGB1;
+    // console.log("in the true part and toggleMonth = " + toggleColour + " = " + rangeBackgroundColour)
+    //toggle = false;
+  }
+  else {
+    rangeBackgroundColour = RGB2;
+    // console.log("in the false part and toggleMonth = " + toggleColour + " = " + rangeBackgroundColour)
+    //toggle = true;
+  }
+
+  formatRange.getFormat().getFill().setColor(rangeBackgroundColour);
+
+  //Format the text within the range
+  formatRange.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+  formatRange.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.center)
+  formatRange.getFormat().getFont().setColor('white');
+  formatRange.getFormat().getFont().setBold;
+  formatRange.getFormat().getFont().setSize(textSize);
+
+  //currentWorksheet.getRange(rangeString).getOffsetRange(-rangeOffSet_i, rangeOffset_j).merge(false);
+  //currentWorksheet.getRange(rangeString).getOffsetRange(rangeOffSet_i, rangeOffset_j).getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+
+  formatRangeBorders(currentWorksheet, rangeStartAddress, rangeEndAddress, rangeOffSet_i, rangeOffset_j);
+
+
+  /*
+    function formatCellText(currentWorksheet: ExcelScript.Worksheet, cellRow: number, cellColumn: number, BackGroundColour: string, textColour:string,textOrientation:number, textSize:number) {
+  */
+
+  return;
+}
+
+/*---------------------------------------------------------------------
+         function addDays()
+ ---------------------------------------------------------------------*/
+
+function addDays(myDate: Date, myDays: number) {
+  var result = new Date(myDate);
+  result.setDate(result.getDate() + myDays);
+  return result;
+}
+
+/*---------------------------------------------------------------------
+         function formatdDate()
+ ---------------------------------------------------------------------*/
+
+function formatDate(myDate: Date) {
+  var d = new Date(myDate),
+    month = '' + (d.getMonth() + 1),
+    day = '' + d.getDate(),
+    year = d.getFullYear();
+
+  if (month.length < 2)
+    month = '0' + month;
+  if (day.length < 2)
+    day = '0' + day;
+
+  //return [day+"." + month+"." + year].join('-');
+  return [day + "." + month + "." + year];
+}
+
+/*---------------------------------------------------------------------
+         function getISO8601_WeekNo()
+ ---------------------------------------------------------------------*/
+
+function getISO8601_WeekNo(currentDay: Date) {
+
+  /* For a given date, get the ISO week number
+  *
+  * Based on information at:
+  *    https://www.w3resource.com/javascript-exercises/javascript-date-exercise-24.php
+  *    https://stackoverflow.com/questions/6117814/get-week-of-year-in-javascript-like-in-php
+  *    THIS PAGE (DOMAIN EVEN) DOESN'T EXIST ANYMORE UNFORTUNATELY
+  *    http://www.merlyn.demon.co.uk/weekcalc.htm#WNR
+  *
+  * Algorithm is to find nearest thursday, it's year
+  * is the year of the week number. Then get weeks
+  * between that date and the first day of that year.
+  *
+  * Note that dates in one year can be weeks of previous
+  * or next year, overlap is up to 3 days.
+  *
+  * e.g. 2014/12/29 is Monday in week  1 of 2015
+  *      2012/1/1   is Sunday in week 52 of 2011
+  */
+
+  /* For a given date, get the ISO week number
+*
+* Based on information at:
+*
+*    THIS PAGE (DOMAIN EVEN) DOESN'T EXIST ANYMORE UNFORTUNATELY
+*    http://www.merlyn.demon.co.uk/weekcalc.htm#WNR
+*
+* Algorithm is to find nearest thursday, it's year
+* is the year of the week number. Then get weeks
+* between that date and the first day of that year.
+*
+* Note that dates in one year can be weeks of previous
+* or next year, overlap is up to 3 days.
+*
+* e.g. 2014/12/29 is Monday in week  1 of 2015
+*      2012/1/1   is Sunday in week 52 of 2011
+*/
+
+  // Copy date so don't modify original
+  let now = new Date(Date.UTC(currentDay.getFullYear(), currentDay.getMonth(), currentDay.getDate()));
+  // Make Sunday's day number 7
+  // Set to nearest Thursday: current date + 4 - current day number
+  // Make Sunday's day number 7
+  now.setUTCDate(now.getUTCDate() + 4 - (now.getUTCDay() || 7));
+  // Get first day of year
+  var yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+  // Calculate full weeks to nearest Thursday
+  //var weekNo = Math.ceil((((now - yearStart) / 86400000) + 1) / 7);
+  let weekNo = Math.ceil((((now.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+  // Return array of year and week number
+  return [weekNo, now.getUTCFullYear()];
+}
+
+
+
+function formatRangeBorders(currentWorksheet: ExcelScript.Worksheet, rangeStart: String, rangeEnd: String, iOffset: number, jOffset: number) {
+  //get the worksheet and cells to format
+  //let currentCellFormat = currentWorksheet.getCell(cellRow, cellColumn).getFormat();
+
+  let currentRange = (rangeStart + ":" + rangeEnd)
+
+  let currentCellFormat = currentWorksheet.getRange(currentRange).getOffsetRange(iOffset, jOffset).getFormat();
+
+
+  //format all the boarders
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.insideHorizontal)
+    .setStyle(ExcelScript.BorderLineStyle.continuous);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.insideHorizontal)
+    .setColor("ffffff");
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.insideHorizontal)
+    .setWeight(ExcelScript.BorderWeight.thin);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.insideVertical)
+    .setStyle(ExcelScript.BorderLineStyle.continuous);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.insideVertical)
+    .setColor("ffffff");
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.insideVertical)
+    .setWeight(ExcelScript.BorderWeight.thin);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeBottom)
+    .setStyle(ExcelScript.BorderLineStyle.continuous);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeBottom)
+    .setColor("ffffff");
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeBottom)
+    .setWeight(ExcelScript.BorderWeight.thin);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeTop)
+    .setStyle(ExcelScript.BorderLineStyle.continuous);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeTop)
+    .setColor("ffffff");
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeTop)
+    .setWeight(ExcelScript.BorderWeight.thin);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeLeft)
+    .setStyle(ExcelScript.BorderLineStyle.continuous);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeLeft)
+    .setColor("ffffff");
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeLeft)
+    .setWeight(ExcelScript.BorderWeight.thin);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeRight)
+    .setStyle(ExcelScript.BorderLineStyle.continuous);
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeRight)
+    .setColor("ffffff");
+  currentCellFormat.getRangeBorder(ExcelScript.BorderIndex.edgeRight)
+    .setWeight(ExcelScript.BorderWeight.thin);
+  return
+}
+
+
+/*
+Function does the text formating of the current range 
+*/
+function formatCellText(currentWorksheet: ExcelScript.Worksheet, rangeStartAddress: String, rangeEndAddress: String, iOffset: number, jOffset: number, BackGroundColour: string, textColour: string, textOrientation: number, textSize: number) {
+
+  let currentRange = (rangeStartAddress + ":" + rangeEndAddress);
+
+  //let currentCellFormat = currentWorksheet.getCell(cellRow, cellColumn).getFormat();
+  let currentCellFormat = currentWorksheet.getRange(currentRange).getOffsetRange(iOffset, jOffset).getFormat();
+
+
+  //Format the fill in the cell background colour
+  currentCellFormat.getFill().setColor(BackGroundColour);
+  //Format the fill in the cell text alignments
+  currentCellFormat.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+  currentCellFormat.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+  currentCellFormat.setIndentLevel(0);
+  //Format the fill in the cell width
+  currentCellFormat.setColumnWidth(15);
+
+  //Set the cell text format & orientation
+  let currentCellFontFormat = currentCellFormat.getFont();
+  currentCellFontFormat.setColor(textColour);
+  currentCellFontFormat.setBold;
+  currentCellFontFormat.setSize(textSize);
+  currentCellFormat.setTextOrientation(textOrientation);
+  return;
+}
+
+/*
+Function to draw vertical lines at specific points on the cavans
+*/
+function drawVerticalLines(currentWorksheet: ExcelScript.Worksheet, drawLineStartRowIndex: number, drawLineStartColumnIndex: number, drawLineEndRowIndex: number, drawLineEndColumnIndex: number, lineColourLeft: string, lineColourRight: string) {
+
+  let columnCount = drawLineEndColumnIndex - drawLineStartColumnIndex;
+  console.log("StartRowIndex =" + drawLineStartRowIndex);
+  console.log("StartColumnIndex =" + drawLineStartColumnIndex);
+  console.log("EndRowIndex =" + drawLineEndRowIndex);
+  console.log("EndColumnIndex =" + drawLineEndColumnIndex);
+  console.log("columnCount = " + columnCount);
+
+
+  //Draws the left and right cell boarder lines lines with range starting +5 down from top to +100. The 
+  let myCanvas = currentWorksheet.getRangeByIndexes(5, drawLineStartColumnIndex, 40, columnCount + 1).getFormat();
+
+
+  // Set border for  ranges on canvas
+  // Set last right border for range on canvas
+  myCanvas.getRangeBorder(ExcelScript.BorderIndex.edgeRight).setStyle(ExcelScript.BorderLineStyle.continuous);
+  myCanvas.getRangeBorder(ExcelScript.BorderIndex.edgeRight).setColor(lineColourRight);
+  myCanvas.getRangeBorder(ExcelScript.BorderIndex.edgeRight).setWeight(ExcelScript.BorderWeight.thin);
+
+  // Set border for range H6:K22 on selectedSheet
+  myCanvas.getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setStyle(ExcelScript.BorderLineStyle.continuous);
+  myCanvas.getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setColor(lineColourLeft);
+  myCanvas.getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setWeight(ExcelScript.BorderWeight.thin);
+
+  return;
+}
+
